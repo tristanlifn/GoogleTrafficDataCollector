@@ -1,7 +1,4 @@
 import json
-
-from dearpygui.dearpygui import hide_item
-
 import Routes
 import dearpygui.dearpygui as dpg
 from datetime import datetime, timedelta
