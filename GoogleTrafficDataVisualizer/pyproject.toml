@@ -1,0 +1,9 @@
+[project]
+name = "pythonproject"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.14"
+dependencies = [
+    "dearpygui==2.2",
+    "pyperclip==1.11.0",
+]
