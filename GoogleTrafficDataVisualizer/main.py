@@ -4,6 +4,8 @@ import dearpygui.dearpygui as dpg
 from datetime import datetime, timedelta
 import pyperclip as pcp
 import webbrowser
+import os
+import glob
 
 loaded_routes = list[Routes.Route]
 
@@ -38,6 +40,27 @@ def seconds_to_iso_duration(seconds: int) -> str:
         parts += f"{secs}S"
     return parts
 
+def refresh_ui(routes: list[Routes.Route]):
+    # Delete existing windows if they exist
+    if dpg.does_item_exist("graph_window"):
+        dpg.delete_item("graph_window")
+    if dpg.does_item_exist("collapse_window"):
+        dpg.delete_item("collapse_window")
+    if dpg.does_item_exist("tooltip"):
+        dpg.delete_item("tooltip")
+    if dpg.does_item_exist("plot_handlers"):
+        dpg.delete_item("plot_handlers")
+
+    build_graph_ui(routes)
+    build_collapsing_ui(routes)
+
+def choose_new_routes(sender, app_data):
+    global loaded_routes
+    filepath = app_data["file_path_name"]
+    loaded_routes = load_routes(filepath)
+    refresh_ui(loaded_routes)
+
+
 def build_graph_ui(routes: list[Routes.Route]):
     global loaded_routes
 
@@ -52,7 +75,7 @@ def build_graph_ui(routes: list[Routes.Route]):
     x_snap = x_range * 0.05
     y_snap = y_range * 0.15
 
-    with dpg.window(label="Routes Graph", width=780, height=500):
+    with dpg.window(label="Routes Graph", width=780, height=520, tag="graph_window"):
         dpg.add_text("Trip Duration Over Time")
         dpg.add_spacer(height=4)
 
@@ -68,8 +91,10 @@ def build_graph_ui(routes: list[Routes.Route]):
             dpg.set_axis_limits(y_axis, min(y_values) - 30, max(y_values) + 30)
             dpg.fit_axis_data(x_axis)
 
+        dpg.add_button(label="Load file", callback=lambda: dpg.show_item("file_dialog_id"))
+
     # Floating tooltip window, hidden until hovering a point
-    with dpg.window(tag="tooltip", show=False, no_title_bar=True, no_resize=True,
+    with dpg.window(tag="tooltip", height=10, show=False, no_title_bar=True, no_resize=True,
                     no_move=True, no_scrollbar=True, no_saved_settings=True):
         dpg.add_text("", tag="tooltip_text")
 
@@ -137,7 +162,7 @@ def build_collapsing_ui(routes: list[Routes.Route]):
         pcp.copy(encoded_polyline)
         webbrowser.open("https://developers.google.com/maps/documentation/utilities/polylineutility")
 
-    with dpg.window(label="Routes Collapse", width=780, height=500, collapsed=True):
+    with dpg.window(label="Routes Collapse", width=780, height=520, collapsed=True, tag="collapse_window"):
         for i, route in enumerate(routes):
             with dpg.collapsing_header(label=f"Route {i + 1}"):
                 dpg.add_text(f"Timestamp:  {route.timestamp}")
@@ -150,10 +175,22 @@ def main():
     global loaded_routes
 
     dpg.create_context()
-    dpg.create_viewport(title="Routes Viewer", width=780, height=500)
+    dpg.create_viewport(title="Routes Viewer", width=780, height=530)
     dpg.setup_dearpygui()
 
-    loaded_routes = load_routes("/home/tristan/routes.json")
+    with open("config.json", "r") as f:
+        data = json.load(f)
+
+    routes_folder_location = data["routesFolderLocation"]
+
+    files = glob.glob(routes_folder_location + "*")
+    latest = max(files, key=os.path.getctime)
+
+    with dpg.file_dialog(directory_selector=False, show=False, callback=choose_new_routes, id="file_dialog_id",
+                         width=700, height=400):
+        dpg.add_file_extension(".json", color=(150, 255, 150, 255))
+
+    loaded_routes = load_routes(latest)
     build_graph_ui(loaded_routes)
     build_collapsing_ui(loaded_routes)
 
