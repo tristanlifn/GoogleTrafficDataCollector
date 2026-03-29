@@ -22,6 +22,7 @@ class Program
 
     private readonly HttpClient HttpClient = new();
     private const string Url = "https://routes.googleapis.com/directions/v2:computeRoutes";
+    private static string _routesFileLocation = "";
     private static string _key = "";
     private static string _destinationAddress = "";
     private static string _originAddress = "";
@@ -34,24 +35,17 @@ class Program
             return;
         }
         
-        string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        File.WriteAllText("/home/pihole/test.txt", documents);
-        string fileName = $"{documents}/routes.json";
-
         try
         {
-            if (!File.Exists(fileName))
-                File.Create(fileName).Dispose();
+            if (!File.Exists(_routesFileLocation))
+                File.Create(_routesFileLocation).Dispose();
             
             RoutesResponse result = ComputeRoutesAsync().Result;
             
-            if (result.Routes == null)
+            if (!result.Routes.Any())
                 return;
             
-            if (result.Routes.Count <= 0)
-                return;
-            
-            string oldJson = File.ReadAllText(fileName);
+            string oldJson = File.ReadAllText(_routesFileLocation);
 
             List<Route> oldRoutsList = [];
             if (!string.IsNullOrWhiteSpace(oldJson))
@@ -59,7 +53,7 @@ class Program
             
             result.Routes?.AddRange(oldRoutsList);
             
-            File.WriteAllText(fileName, JsonSerializer.Serialize(result, JsonOptions));
+            File.WriteAllText(_routesFileLocation, JsonSerializer.Serialize(result, JsonOptions));
         }
         catch (HttpRequestException ex)
         {
@@ -69,13 +63,17 @@ class Program
 
     private bool LoadConfig()
     {
-        string configString = File.ReadAllText("config.json");
+        string appDir = AppContext.BaseDirectory;
+        string configLocation = Path.Combine(appDir, "config.json");
+        
+        string configString = File.ReadAllText(configLocation);
         Config config = JsonSerializer.Deserialize<Config>(configString, JsonOptions) ?? new Config();
         
-        if (string.IsNullOrEmpty(config.GoogleApiKey) || string.IsNullOrEmpty(config.OriginAddress) || string.IsNullOrEmpty(config.DestinationAddress))
+        if (string.IsNullOrEmpty(config.GoogleApiKey) || string.IsNullOrEmpty(config.OriginAddress) || string.IsNullOrEmpty(config.DestinationAddress) ||  string.IsNullOrEmpty(config.RoutesFileLocation))
             return false;
         
         _key = config.GoogleApiKey;
+        _routesFileLocation =  config.RoutesFileLocation;
         _originAddress = config.OriginAddress;
         _destinationAddress = config.DestinationAddress;
         
