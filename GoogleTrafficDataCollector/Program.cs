@@ -37,27 +37,7 @@ class Program
         
         try
         {
-            string fileLocation = $"{_routesFolderLocation}routes-{DateTime.Now:yyyy-MM-dd}.json";
-            
-            if (!Directory.Exists(_routesFolderLocation))
-            {
-                Directory.CreateDirectory(_routesFolderLocation);
-                File.Create(fileLocation).Close();
-            }
-            else if (!Directory.EnumerateFiles(_routesFolderLocation).Any())
-            {
-                File.Create(fileLocation).Close();
-            }
-            else
-            {
-                DirectoryInfo directoryInfo = new(_routesFolderLocation);
-                FileInfo myFile = directoryInfo.GetFiles()
-                    .OrderByDescending(f => f.LastWriteTime)
-                    .First();
-                
-                if (myFile.LastWriteTime.ToShortDateString() != DateTime.Now.ToShortDateString())
-                    fileLocation = myFile.FullName;
-            }
+            string fileLocation = GetRelevantFileLocation();
             
             RoutesResponse result = ComputeRoutesAsync().Result;
             
@@ -97,6 +77,33 @@ class Program
         _destinationAddress = config.DestinationAddress;
         
         return true;
+    }
+
+    private string GetRelevantFileLocation()
+    {
+        string fileLocation = $"{_routesFolderLocation}routes-{DateTime.Now:yyyy-MM-dd}.json";
+            
+        if (!Directory.Exists(_routesFolderLocation))
+        {
+            Directory.CreateDirectory(_routesFolderLocation);
+            File.Create(fileLocation).Close();
+        }
+        else if (!Directory.EnumerateFiles(_routesFolderLocation).Any())
+        {
+            File.Create(fileLocation).Close();
+        }
+        else
+        {
+            DirectoryInfo directoryInfo = new(_routesFolderLocation);
+            FileInfo myFile = directoryInfo.GetFiles()
+                .OrderByDescending(f => f.CreationTime)
+                .First();
+                
+            if (myFile.CreationTime.ToShortDateString() != DateTime.Now.ToShortDateString())
+                fileLocation = myFile.FullName;
+        }
+        
+        return fileLocation;
     }
     
     private async Task<RoutesResponse> ComputeRoutesAsync()
