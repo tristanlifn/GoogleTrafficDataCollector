@@ -22,7 +22,7 @@ class Program
 
     private readonly HttpClient HttpClient = new();
     private const string Url = "https://routes.googleapis.com/directions/v2:computeRoutes";
-    private static string _routesFileLocation = "";
+    private static string _routesFolderLocation = "";
     private static string _key = "";
     private static string _destinationAddress = "";
     private static string _originAddress = "";
@@ -37,15 +37,34 @@ class Program
         
         try
         {
-            if (!File.Exists(_routesFileLocation))
-                File.Create(_routesFileLocation).Dispose();
+            string fileLocation = $"{_routesFolderLocation}routes-{DateTime.Now:yyyy-MM-dd}.json";
+            
+            if (!Directory.Exists(_routesFolderLocation))
+            {
+                Directory.CreateDirectory(_routesFolderLocation);
+                File.Create(fileLocation).Close();
+            }
+            else if (!Directory.EnumerateFiles(_routesFolderLocation).Any())
+            {
+                File.Create(fileLocation).Close();
+            }
+            else
+            {
+                DirectoryInfo directoryInfo = new(_routesFolderLocation);
+                FileInfo myFile = directoryInfo.GetFiles()
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .First();
+                
+                if (myFile.LastWriteTime.ToShortDateString() != DateTime.Now.ToShortDateString())
+                    fileLocation = myFile.FullName;
+            }
             
             RoutesResponse result = ComputeRoutesAsync().Result;
             
             if (!result.Routes.Any())
                 return;
             
-            string oldJson = File.ReadAllText(_routesFileLocation);
+            string oldJson = File.ReadAllText(fileLocation);
 
             List<Route> oldRoutsList = [];
             if (!string.IsNullOrWhiteSpace(oldJson))
@@ -53,7 +72,7 @@ class Program
             
             result.Routes?.AddRange(oldRoutsList);
             
-            File.WriteAllText(_routesFileLocation, JsonSerializer.Serialize(result, JsonOptions));
+            File.WriteAllText(fileLocation, JsonSerializer.Serialize(result, JsonOptions));
         }
         catch (HttpRequestException ex)
         {
@@ -69,11 +88,11 @@ class Program
         string configString = File.ReadAllText(configLocation);
         Config config = JsonSerializer.Deserialize<Config>(configString, JsonOptions) ?? new Config();
         
-        if (string.IsNullOrEmpty(config.GoogleApiKey) || string.IsNullOrEmpty(config.OriginAddress) || string.IsNullOrEmpty(config.DestinationAddress) ||  string.IsNullOrEmpty(config.RoutesFileLocation))
+        if (string.IsNullOrEmpty(config.GoogleApiKey) || string.IsNullOrEmpty(config.OriginAddress) || string.IsNullOrEmpty(config.DestinationAddress) ||  string.IsNullOrEmpty(config.RoutesFolderLocation))
             return false;
         
         _key = config.GoogleApiKey;
-        _routesFileLocation =  config.RoutesFileLocation;
+        _routesFolderLocation =  config.RoutesFolderLocation;
         _originAddress = config.OriginAddress;
         _destinationAddress = config.DestinationAddress;
         
