@@ -1,7 +1,5 @@
-﻿using System.Net;
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
-using Microsoft.VisualBasic;
 
 namespace GoogleTrafficDataCollector;
 
@@ -28,29 +26,6 @@ class Program
     private static string _destinationAddress = "";
     private static string _originAddress = "";
 
-    private string _requestBody = $$"""
-        {
-            "computeAlternativeRoutes": false,
-            "destination": {
-                "address": "{{_destinationAddress}}"
-            },
-            "origin": {
-                "address": "{{_originAddress}}"
-            },
-            "polylineQuality": "overview",
-            "routeModifiers": {
-                "avoidTolls": false,
-                "avoidHighways": false,
-                "avoidFerries": false,
-                "avoidIndoor": false
-            },
-            "routingPreference": "TRAFFIC_AWARE_OPTIMAL",
-            "travelMode": "DRIVE",
-            "languageCode": "en-US",
-            "units": "METRIC"
-        }
-        """;
-
     private Program()
     {
         if (!LoadConfig())
@@ -60,6 +35,7 @@ class Program
         }
         
         string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        File.WriteAllText("/home/pihole/test.txt", documents);
         string fileName = $"{documents}/routes.json";
 
         try
@@ -69,7 +45,10 @@ class Program
             
             RoutesResponse result = ComputeRoutesAsync().Result;
             
-            if (result.Routes?.Count <= 0)
+            if (result.Routes == null)
+                return;
+            
+            if (result.Routes.Count <= 0)
                 return;
             
             string oldJson = File.ReadAllText(fileName);
@@ -107,10 +86,33 @@ class Program
     {
         string json = "";
         
+        string requestBody = $$"""
+            {
+                "computeAlternativeRoutes": false,
+                "destination": {
+                    "address": "{{_destinationAddress}}"
+                },
+                "origin": {
+                    "address": "{{_originAddress}}"
+                },
+                "polylineQuality": "overview",
+                "routeModifiers": {
+                    "avoidTolls": false,
+                    "avoidHighways": false,
+                    "avoidFerries": false,
+                    "avoidIndoor": false
+                },
+                "routingPreference": "TRAFFIC_AWARE_OPTIMAL",
+                "travelMode": "DRIVE",
+                "languageCode": "en-US",
+                "units": "METRIC"
+            }
+            """;
+        
         try
         {
             using HttpRequestMessage request = new(HttpMethod.Post, Url);
-            request.Content = new StringContent(_requestBody, Encoding.UTF8, "application/json");
+            request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
             request.Headers.Add("X-Goog-Api-Key", _key);
             request.Headers.Add("X-Goog-FieldMask",
                 "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline");
