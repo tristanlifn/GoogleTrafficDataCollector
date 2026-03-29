@@ -62,7 +62,7 @@ def build_graph_ui(routes: list[Routes.Route]):
             x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Timestamp", scale=1)
             y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Duration (seconds)")
 
-            # dpg.add_line_series(x_values, y_values, label="Duration", parent=y_axis)
+            dpg.add_line_series(x_values, y_values, label="Duration", parent=y_axis)
             dpg.add_scatter_series(x_values, y_values, label="Captured points", parent=y_axis)
 
             dpg.set_axis_limits(y_axis, min(y_values) - 30, max(y_values) + 30)
@@ -129,7 +129,6 @@ def build_graph_ui(routes: list[Routes.Route]):
 
 def build_collapsing_ui(routes: list[Routes.Route]):
     global loaded_routes
-    just_opened = True
 
     def copy_clicked(encoded_polyline):
         if encoded_polyline is None:
@@ -146,11 +145,6 @@ def build_collapsing_ui(routes: list[Routes.Route]):
                 dpg.add_text(f"Distance:   {route.distance_meters} m")
                 dpg.add_button(label="Click to copy encoded polyline", callback=lambda: copy_clicked(route.polyLine.encoded_polyline))
                 dpg.add_separator()
-
-    just_opened = False
-
-def convert_seconds_to_timestamp(seconds: int):
-    return datetime.fromtimestamp(seconds).isoformat()
 
 def main():
     global loaded_routes

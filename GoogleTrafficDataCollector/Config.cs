@@ -1,4 +1,4 @@
-namespace HeadlessBrowserTest;
+namespace GoogleTrafficDataCollector;
 
 public class Config
 {

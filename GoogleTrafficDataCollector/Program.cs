@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.VisualBasic;
 
-namespace  HeadlessBrowserTest;
+namespace GoogleTrafficDataCollector;
 
 public class RoutesResponse
 {
@@ -111,7 +111,7 @@ class Program
         {
             using HttpRequestMessage request = new(HttpMethod.Post, Url);
             request.Content = new StringContent(_requestBody, Encoding.UTF8, "application/json");
-            request.Headers.Add("X-Goog-Api-Key", "AIzaSyCrQMbThAV4ZaXdq5-e82RcAJ5EEWmik_0");
+            request.Headers.Add("X-Goog-Api-Key", _key);
             request.Headers.Add("X-Goog-FieldMask",
                 "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline");
 

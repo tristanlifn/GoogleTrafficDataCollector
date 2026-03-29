@@ -1,4 +1,4 @@
-namespace HeadlessBrowserTest;
+namespace GoogleTrafficDataCollector;
 
 public class Route(int distanceMeters, string duration, PolyLine polyline)
 {
