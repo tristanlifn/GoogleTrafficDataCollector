@@ -6,8 +6,24 @@ import pyperclip as pcp
 import webbrowser
 import os
 import glob
+import calendar
+import os.path
 
 loaded_routes = list[Routes.Route]
+
+def error_opening(message: str):
+    with dpg.window(label="Error", width=400, height=200):
+        dpg.add_text(message)
+
+def get_config() -> str:
+    if not os.path.exists("config.json"):
+        error_opening("No config found in executing directory")
+        return None
+
+    with open("config.json", "r") as f:
+        data = json.load(f)
+
+    return data["routesFolderLocation"]
 
 def load_routes(filepath: str) -> list[Routes.Route]:
     with open(filepath, "r") as f:
@@ -60,13 +76,12 @@ def choose_new_routes(sender, app_data):
     loaded_routes = load_routes(filepath)
     refresh_ui(loaded_routes)
 
-
 def build_graph_ui(routes: list[Routes.Route]):
     global loaded_routes
 
     sorted_routes = sorted(routes, key=lambda r: r.timestamp)
 
-    x_values = [datetime.fromisoformat(r.timestamp).timestamp() for r in sorted_routes]
+    x_values = [calendar.timegm(datetime.fromisoformat(r.timestamp).timetuple()) for r in sorted_routes]
     y_values = [int(r.duration.replace("s", "")) for r in sorted_routes]
 
     # Thresholds for snapping to a point (in plot-space units)
@@ -120,7 +135,7 @@ def build_graph_ui(routes: list[Routes.Route]):
             seconds = y_values[nearest]
             iso_duration = seconds_to_iso_duration(seconds)
             timestamp = sorted_routes[nearest].timestamp.split('.')[0]
-            dpg.set_value("tooltip_text", f"Duration:  {iso_duration}\nTimestamp: {timestamp}")
+            dpg.set_value("tooltip_text", f"Duration:  {iso_duration}\nTimestamp: {timestamp.replace('T', ' ')}")
             px, py = dpg.get_mouse_pos(local=False)
             dpg.configure_item("tooltip", show=True, pos=(int(px) + 12, int(py) + 12))
         else:
@@ -171,6 +186,34 @@ def build_collapsing_ui(routes: list[Routes.Route]):
                 dpg.add_button(label="Click to copy encoded polyline", callback=lambda: copy_clicked(route.polyLine.encoded_polyline))
                 dpg.add_separator()
 
+def draw_all():
+    global loaded_routes
+
+    routes_folder_location = get_config()
+
+    if routes_folder_location is None:
+        return
+
+    if not os.path.exists(routes_folder_location):
+        error_opening("No routes folder found.")
+        return
+
+    files = glob.glob(routes_folder_location + "*")
+
+    if not files:
+        error_opening("No routes files found.")
+        return
+
+    latest = max(files, key=os.path.getctime)
+
+    with dpg.file_dialog(directory_selector=False, show=False, callback=choose_new_routes, id="file_dialog_id",
+                             width=700, height=400):
+        dpg.add_file_extension(".json", color=(150, 255, 150, 255))
+
+    loaded_routes = load_routes(latest)
+    build_graph_ui(loaded_routes)
+    build_collapsing_ui(loaded_routes)
+
 def main():
     global loaded_routes
 
@@ -178,21 +221,7 @@ def main():
     dpg.create_viewport(title="Routes Viewer", width=780, height=530)
     dpg.setup_dearpygui()
 
-    with open("config.json", "r") as f:
-        data = json.load(f)
-
-    routes_folder_location = data["routesFolderLocation"]
-
-    files = glob.glob(routes_folder_location + "*")
-    latest = max(files, key=os.path.getctime)
-
-    with dpg.file_dialog(directory_selector=False, show=False, callback=choose_new_routes, id="file_dialog_id",
-                         width=700, height=400):
-        dpg.add_file_extension(".json", color=(150, 255, 150, 255))
-
-    loaded_routes = load_routes(latest)
-    build_graph_ui(loaded_routes)
-    build_collapsing_ui(loaded_routes)
+    draw_all()
 
     dpg.show_viewport()
     dpg.start_dearpygui()
