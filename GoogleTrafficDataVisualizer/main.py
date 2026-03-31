@@ -180,7 +180,7 @@ def build_collapsing_ui(routes: list[Routes.Route]):
     with dpg.window(label="Routes Collapse", width=780, height=520, collapsed=True, tag="collapse_window"):
         for i, route in enumerate(routes):
             with dpg.collapsing_header(label=f"Route {i + 1}"):
-                dpg.add_text(f"Timestamp:  {route.timestamp}")
+                dpg.add_text(f"Timestamp:  {route.timestamp.replace('T', ' ')}")
                 dpg.add_text(f"Duration:   {route.duration_as_timespan}  ({route.duration})")
                 dpg.add_text(f"Distance:   {route.distance_meters} m")
                 dpg.add_button(label="Click to copy encoded polyline", callback=lambda: copy_clicked(route.polyLine.encoded_polyline))

@@ -44,6 +44,9 @@ class Program
             if (!result.Routes.Any())
                 return;
             
+            if (!File.Exists(fileLocation))
+                File.Create(fileLocation).Close();
+            
             string oldJson = File.ReadAllText(fileLocation);
 
             List<Route> oldRoutsList = [];
