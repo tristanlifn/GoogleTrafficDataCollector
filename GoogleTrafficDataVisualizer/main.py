@@ -88,7 +88,7 @@ def build_graph_ui(routes: list[Routes.Route]):
     x_range = max(x_values) - min(x_values) if len(x_values) > 1 else 1
     y_range = max(y_values) - min(y_values) if len(y_values) > 1 else 1
     x_snap = x_range * 0.05
-    y_snap = y_range * 0.15
+    y_snap = y_range * 0.05
 
     with dpg.window(label="Routes Graph", width=780, height=520, tag="graph_window"):
         dpg.add_text("Trip Duration Over Time")

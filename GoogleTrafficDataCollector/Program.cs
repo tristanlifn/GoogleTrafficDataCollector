@@ -12,7 +12,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        new Program();
+        Program _ = new();
     }
     
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -101,8 +101,8 @@ class Program
             FileInfo myFile = directoryInfo.GetFiles()
                 .OrderByDescending(f => f.CreationTime)
                 .First();
-                
-            if (myFile.CreationTime.ToShortDateString() != DateTime.Now.ToShortDateString())
+
+            if (DateOnly.FromDateTime(myFile.CreationTime) == DateOnly.FromDateTime(DateTime.Now))
                 fileLocation = myFile.FullName;
         }
         
