@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Net;
+using System.Text;
 using System.Text.Json;
 
 namespace GoogleTrafficDataCollector;
@@ -37,15 +38,12 @@ class Program
         
         try
         {
-            string fileLocation = GetRelevantFileLocation();
+            string fileLocation = CheckFileExists();
             
             RoutesResponse result = ComputeRoutesAsync().Result;
             
             if (!result.Routes.Any())
                 return;
-            
-            if (!File.Exists(fileLocation))
-                File.Create(fileLocation).Close();
             
             string oldJson = File.ReadAllText(fileLocation);
 
@@ -82,29 +80,15 @@ class Program
         return true;
     }
 
-    private string GetRelevantFileLocation()
+    private string CheckFileExists()
     {
         string fileLocation = $"{_routesFolderLocation}routes-{DateTime.Now:yyyy-MM-dd}.json";
             
         if (!Directory.Exists(_routesFolderLocation))
-        {
             Directory.CreateDirectory(_routesFolderLocation);
+        
+        if (!File.Exists(fileLocation))
             File.Create(fileLocation).Close();
-        }
-        else if (!Directory.EnumerateFiles(_routesFolderLocation).Any())
-        {
-            File.Create(fileLocation).Close();
-        }
-        else
-        {
-            DirectoryInfo directoryInfo = new(_routesFolderLocation);
-            FileInfo myFile = directoryInfo.GetFiles()
-                .OrderByDescending(f => f.CreationTime)
-                .First();
-
-            if (DateOnly.FromDateTime(myFile.CreationTime) == DateOnly.FromDateTime(DateTime.Now))
-                fileLocation = myFile.FullName;
-        }
         
         return fileLocation;
     }
