@@ -1,3 +1,10 @@
+class Routes:
+    def __init__(self, routes: list[Route]):
+        self.routes = routes
+
+    def append(self, route: Route):
+        self.routes.append(route)
+
 class PolyLine:
     def __init__(self, encoded_polyline):
         self.encoded_polyline = encoded_polyline

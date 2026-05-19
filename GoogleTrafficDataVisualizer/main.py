@@ -9,23 +9,61 @@ import glob
 import calendar
 import os.path
 
-loaded_routes = list[Routes.Route]
+routes_location = ""
+loaded_routes = []
 
 def error_opening(message: str):
     with dpg.window(label="Error", width=400, height=200):
         dpg.add_text(message)
 
-def get_config() -> str:
+def get_config():
+    global routes_location
     if not os.path.exists("config.json"):
         error_opening("No config found in executing directory")
-        return None
+        return
 
     with open("config.json", "r") as f:
         data = json.load(f)
 
-    return data["routesFolderLocation"]
+    routes_location = data["routesFolderLocation"]
 
-def load_routes(filepath: str) -> list[Routes.Route]:
+def get_week_start_end(date_input) -> list[str]:
+    if isinstance(date_input, str):
+        try:
+            date_input = datetime.strptime(date_input, '%Y-%m-%d')
+        except ValueError:
+            date_input = datetime.now()
+
+    days_to_subtract = date_input.weekday()
+    start_date = date_input - timedelta(days=days_to_subtract)
+    end_date = start_date + timedelta(days=7)
+
+    start_date = start_date.strftime("%Y-%m-%d")
+    end_date = end_date.strftime("%Y-%m-%d")
+
+    return [start_date, end_date]
+
+def get_files_from_period(start_date: str, end_date: str) -> list[str]:
+    global routes_location
+
+    files_in_period = []
+
+    all_files = os.listdir(routes_location)
+
+    if all_files is None or all_files == []:
+        error_opening("No files in directory")
+        return None
+
+    for file in all_files:
+        date = file.split('_')[1]
+        date = date.split('.')[0]
+
+        if start_date <= date <= end_date:
+            files_in_period.append(routes_location + file)
+
+    return files_in_period
+
+def load_routes(filepath: str) -> Routes.Routes:
     with open(filepath, "r") as f:
         data = json.load(f)
 
@@ -40,6 +78,8 @@ def load_routes(filepath: str) -> list[Routes.Route]:
             timestamp=r["timestamp"],
         )
         routes.append(route)
+
+    routes = Routes.Routes(routes)
 
     return routes
 
@@ -76,19 +116,35 @@ def choose_new_routes(sender, app_data):
     loaded_routes = load_routes(filepath)
     refresh_ui(loaded_routes)
 
-def build_graph_ui(routes: list[Routes.Route]):
+def build_graph_ui(): # routes_list is list[Routes]
     global loaded_routes
+    routes_list = loaded_routes
+    # Flatten all routes from all files but keep per‑file data for plotting
+    all_series = []   # will store (x_vals, y_vals, sorted_route_list, label) per file
 
-    sorted_routes = sorted(routes, key=lambda r: r.timestamp)
+    for file_index, routes_obj in enumerate(routes_list):
+        file_routes = routes_obj.routes   # list of Route
+        if not file_routes:
+            continue
 
-    x_values = [calendar.timegm(datetime.fromisoformat(r.timestamp).timetuple()) for r in sorted_routes]
-    y_values = [int(r.duration.replace("s", "")) for r in sorted_routes]
+        sorted_routes = sorted(file_routes, key=lambda r: r.timestamp)
+        x_vals = [calendar.timegm(datetime.fromisoformat(r.timestamp).timetuple()) for r in sorted_routes]
+        # Convert duration string like "1234s" to integer seconds
+        y_vals = [int(r.duration.replace("s", "")) for r in sorted_routes]
 
-    # Thresholds for snapping to a point (in plot-space units)
-    x_range = max(x_values) - min(x_values) if len(x_values) > 1 else 1
-    y_range = max(y_values) - min(y_values) if len(y_values) > 1 else 1
-    x_snap = x_range * 0.05
-    y_snap = y_range * 0.05
+        label = f"File {file_index + 1}"
+        all_series.append((x_vals, y_vals, sorted_routes, label))
+
+    if not all_series:
+        return
+
+    # Compute global x/y range for snapping
+    all_x = [x for s in all_series for x in s[0]]
+    all_y = [y for s in all_series for y in s[1]]
+    x_range = max(all_x) - min(all_x) if len(all_x) > 1 else 1
+    y_range = max(all_y) - min(all_y) if len(all_y) > 1 else 1
+    x_snap = x_range * 0.02
+    y_snap = y_range * 0.02
 
     with dpg.window(label="Routes Graph", width=780, height=520, tag="graph_window"):
         dpg.add_text("Trip Duration Over Time")
@@ -100,42 +156,48 @@ def build_graph_ui(routes: list[Routes.Route]):
             x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Timestamp", scale=1)
             y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Duration (seconds)")
 
-            dpg.add_line_series(x_values, y_values, label="Duration", parent=y_axis)
-            dpg.add_scatter_series(x_values, y_values, label="Captured points", parent=y_axis)
+            # Plot each file as a separate line series
+            for x_vals, y_vals, _, label in all_series:
+                dpg.add_line_series(x_vals, y_vals, label=label, parent=y_axis)
 
-            dpg.set_axis_limits(y_axis, min(y_values) - 30, max(y_values) + 30)
+            dpg.set_axis_limits(y_axis, min(all_y) - 30, max(all_y) + 30)
             dpg.fit_axis_data(x_axis)
 
         dpg.add_button(label="Load file", callback=lambda: dpg.show_item("file_dialog_id"))
 
-    # Floating tooltip window, hidden until hovering a point
+    # Tooltip window
     with dpg.window(tag="tooltip", height=10, show=False, no_title_bar=True, no_resize=True,
                     no_move=True, no_scrollbar=True, no_saved_settings=True):
         dpg.add_text("", tag="tooltip_text")
 
     def get_nearest_node():
         mx, my = dpg.get_plot_mouse_pos()
+        best_series_idx = None
+        best_point_idx = None
+        best_dist = float("inf")
 
-        # Find the nearest data point within snap threshold
-        nearest = None
-        nearest_dist = float("inf")
-        for i, (x, y) in enumerate(zip(x_values, y_values)):
-            if abs(mx - x) < x_snap and abs(my - y) < y_snap:
-                dist = ((mx - x) ** 2 + (my - y) ** 2) ** 0.5
-                if dist < nearest_dist:
-                    nearest_dist = dist
-                    nearest = i
+        for s_idx, (x_vals, y_vals, _, _) in enumerate(all_series):
+            for p_idx, (x, y) in enumerate(zip(x_vals, y_vals)):
+                if abs(mx - x) < x_snap and abs(my - y) < y_snap:
+                    dist = ((mx - x) ** 2 + (my - y) ** 2) ** 0.5
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_series_idx = s_idx
+                        best_point_idx = p_idx
 
-        return nearest
+        if best_series_idx is not None:
+            return best_series_idx, best_point_idx
+        return None
 
     def on_plot_hover():
         nearest = get_nearest_node()
-
         if nearest is not None:
-            seconds = y_values[nearest]
+            s_idx, p_idx = nearest
+            seconds = all_series[s_idx][1][p_idx]
             iso_duration = seconds_to_iso_duration(seconds)
-            timestamp = sorted_routes[nearest].timestamp.split('.')[0]
-            dpg.set_value("tooltip_text", f"Duration:  {iso_duration}\nTimestamp: {timestamp.replace('T', ' ')}")
+            timestamp = all_series[s_idx][2][p_idx].timestamp.split('.')[0]
+            dpg.set_value("tooltip_text",
+                          f"Duration:  {iso_duration}\nTimestamp: {timestamp.replace('T', ' ')}")
             px, py = dpg.get_mouse_pos(local=False)
             dpg.configure_item("tooltip", show=True, pos=(int(px) + 12, int(py) + 12))
         else:
@@ -143,22 +205,12 @@ def build_graph_ui(routes: list[Routes.Route]):
 
     def on_plot_click():
         nearest = get_nearest_node()
-
-        if loaded_routes is None or nearest is None:
-            dpg.configure_item("tooltip", show=False)
+        if nearest is None:
             return
 
-        timestamp = sorted_routes[nearest].timestamp
-        test = None
-
-        for x in loaded_routes:
-            if x.timestamp == timestamp:
-                test = x
-
-        if test is None:
-            return
-
-        pcp.copy(test.polyLine.encoded_polyline)
+        s_idx, p_idx = nearest
+        route = all_series[s_idx][2][p_idx]
+        pcp.copy(route.polyLine.encoded_polyline)
         webbrowser.open("https://developers.google.com/maps/documentation/utilities/polylineutility")
 
     with dpg.item_handler_registry(tag="plot_handlers"):
@@ -166,7 +218,6 @@ def build_graph_ui(routes: list[Routes.Route]):
         dpg.add_item_clicked_handler(callback=on_plot_click)
 
     dpg.bind_item_handler_registry("plot", "plot_handlers")
-
 def build_collapsing_ui(routes: list[Routes.Route]):
     global loaded_routes
 
@@ -188,31 +239,49 @@ def build_collapsing_ui(routes: list[Routes.Route]):
 
 def draw_all():
     global loaded_routes
+    global routes_location
 
-    routes_folder_location = get_config()
+    get_config()
 
-    if routes_folder_location is None:
+    if routes_location is None:
         return
 
-    if not os.path.exists(routes_folder_location):
+    if not os.path.exists(routes_location):
         error_opening("No routes folder found.")
         return
 
-    files = glob.glob(routes_folder_location + "*")
+    if routes_location[-1] != '/':
+        routes_location += '/'
 
-    if not files:
-        error_opening("No routes files found.")
-        return
+    period_start_end = get_week_start_end(datetime.today())
+    files = get_files_from_period(period_start_end[0], period_start_end[1])
 
-    latest = max(files, key=os.path.getctime)
+    # with dpg.file_dialog(directory_selector=False, show=False, callback=choose_new_routes, id="file_dialog_id",
+    #         default_path=routes_location, width=700, height=400):
+    #     dpg.add_file_extension(".json", color=(150, 255, 150, 255))
 
-    with dpg.file_dialog(directory_selector=False, show=False, callback=choose_new_routes, id="file_dialog_id",
-                             width=700, height=400):
-        dpg.add_file_extension(".json", color=(150, 255, 150, 255))
+    # loaded_routes = load_routes(latest)
 
-    loaded_routes = load_routes(latest)
-    build_graph_ui(loaded_routes)
-    build_collapsing_ui(loaded_routes)
+    for file in files:
+        routes = load_routes(file)
+
+        if routes is not None:
+            loaded_routes.append(routes)
+
+    base_date = datetime(2000, 1, 1)
+
+    for routes in loaded_routes:
+        for route in routes.routes:
+            # Parse the original timestamp
+            dt = datetime.fromisoformat(route.timestamp)
+            # Keep the time part but set the date to the fixed base date
+            normalized_dt = base_date.replace(hour=dt.hour, minute=dt.minute, second=dt.second,
+                                              microsecond=dt.microsecond)
+            # Write back as a string (ISO format)
+            route.timestamp = normalized_dt.isoformat()
+
+    build_graph_ui()
+    # build_collapsing_ui(loaded_routes)
 
 def main():
     global loaded_routes
