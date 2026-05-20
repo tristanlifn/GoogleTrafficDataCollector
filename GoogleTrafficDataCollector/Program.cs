@@ -82,7 +82,7 @@ class Program
 
     private string CheckFileExists()
     {
-        string fileLocation = $"{_routesFolderLocation}routes-{DateTime.Now:yyyy-MM-dd}.json";
+        string fileLocation = $"{_routesFolderLocation}routes_{DateTime.Now:yyyy-MM-dd}.json";
             
         if (!Directory.Exists(_routesFolderLocation))
             Directory.CreateDirectory(_routesFolderLocation);

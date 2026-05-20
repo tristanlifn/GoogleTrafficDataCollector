@@ -5,12 +5,12 @@ from datetime import datetime, timedelta
 import pyperclip as pcp
 import webbrowser
 import os
-import glob
 import calendar
 import os.path
 
 routes_location = ""
 loaded_routes = []
+window_size = window_size_x, window_size_y = 1000, 600
 
 def error_opening(message: str):
     with dpg.window(label="Error", width=400, height=200):
@@ -90,12 +90,8 @@ def normalize_timestamp():
 
     for routes in loaded_routes:
         for route in routes.routes:
-            # Parse the original timestamp
             dt = datetime.fromisoformat(route.timestamp)
-            # Keep the time part but set the date to the fixed base date
-            normalized_dt = base_date.replace(hour=dt.hour, minute=dt.minute, second=dt.second,
-                                              microsecond=dt.microsecond)
-            # Write back as a string (ISO format)
+            normalized_dt = base_date.replace(hour=dt.hour, minute=dt.minute, second=dt.second, microsecond=dt.microsecond)
             route.normalized_timestamp = normalized_dt.isoformat()
 
 def seconds_to_iso_duration(seconds: int) -> str:
@@ -111,7 +107,7 @@ def seconds_to_iso_duration(seconds: int) -> str:
         parts += f"{secs}S"
     return parts
 
-def refresh_ui(routes: list[Routes.Route]):
+def refresh_ui():
     # Delete existing windows if they exist
     if dpg.does_item_exist("graph_window"):
         dpg.delete_item("graph_window")
@@ -122,22 +118,22 @@ def refresh_ui(routes: list[Routes.Route]):
     if dpg.does_item_exist("plot_handlers"):
         dpg.delete_item("plot_handlers")
 
-    build_graph_ui(routes)
-    build_collapsing_ui(routes)
+    build_graph_ui()
+    build_collapsing_ui()
 
 def build_graph_ui(period: list[str]):
     global loaded_routes
+    global window_size
 
-    all_series = []   # will store (x_vals, y_vals, sorted_route_list, label) per file
+    all_series = []
 
     for file_index, routes_obj in enumerate(loaded_routes):
-        file_routes = routes_obj.routes   # list of Route
+        file_routes = routes_obj.routes
         if not file_routes:
             continue
 
         sorted_routes = sorted(file_routes, key=lambda r: r.timestamp)
         x_vals = [calendar.timegm(datetime.fromisoformat(r.normalized_timestamp).timetuple()) for r in sorted_routes]
-        # Convert duration string like "1234s" to integer seconds
         y_vals = [int(r.duration.replace("s", "")) for r in sorted_routes]
 
         label = f"File {file_index + 1}"
@@ -154,7 +150,8 @@ def build_graph_ui(period: list[str]):
     x_snap = x_range * 0.02
     y_snap = y_range * 0.02
 
-    with dpg.window(label="Routes Graph", width=780, height=520, tag="graph_window"):
+    with dpg.window(label="Routes Graph", width=window_size[0], height=window_size[1],
+                    tag="graph_window", no_close=True, no_move=True, no_resize=True):
         dpg.add_text(f"Trip Duration Over Time\nPeriod: {period[0]} - {period[1]}")
         dpg.add_spacer(height=4)
 
@@ -224,9 +221,9 @@ def build_graph_ui(period: list[str]):
         dpg.add_item_clicked_handler(callback=on_plot_click)
 
     dpg.bind_item_handler_registry("plot", "plot_handlers")
-def build_collapsing_ui(routes: list[Routes.Route]):
+def build_collapsing_ui():
     global loaded_routes
-    # Refactor: make colapsing headers nested
+    global window_size
 
     def copy_clicked(encoded_polyline):
         if encoded_polyline is None:
@@ -235,14 +232,26 @@ def build_collapsing_ui(routes: list[Routes.Route]):
         pcp.copy(encoded_polyline)
         webbrowser.open("https://developers.google.com/maps/documentation/utilities/polylineutility")
 
-    with dpg.window(label="Routes Collapse", width=780, height=520, collapsed=True, tag="collapse_window"):
-        for i, route in enumerate(routes):
-            with dpg.collapsing_header(label=f"Route {i + 1}"):
-                dpg.add_text(f"Timestamp:  {route.timestamp.replace('T', ' ')}")
-                dpg.add_text(f"Duration:   {route.duration_as_timespan}  ({route.duration})")
-                dpg.add_text(f"Distance:   {route.distance_meters} m")
-                dpg.add_button(label="Click to copy encoded polyline", callback=lambda: copy_clicked(route.polyLine.encoded_polyline))
-                dpg.add_separator()
+    with dpg.window(label="Routes Collapse", width=window_size[0], height=window_size[1], collapsed=True,
+                    tag="collapse_window", no_close=True, no_move=True, no_resize=True):
+        for i, routes_obj in enumerate(loaded_routes):
+            if not routes_obj.routes:
+                continue
+
+            date_str = routes_obj.routes[0].timestamp.split('T')[0]
+            with dpg.collapsing_header(label=f"Date: {date_str}"):
+                for j, route in enumerate(routes_obj.routes):
+
+                    time_str = route.timestamp.split('T')[1].split('.')[0]
+                    with dpg.collapsing_header(label=f"Route {time_str}"):
+                        dpg.add_text(f"Timestamp:  {route.timestamp.replace('T', ' ')}")
+                        dpg.add_text(f"Duration:   {route.duration_as_timespan}  ({route.duration})")
+                        dpg.add_text(f"Distance:   {route.distance_meters} m")
+                        dpg.add_button(
+                            label="Click to copy encoded polyline",
+                            callback=lambda s, a, u=route.polyLine.encoded_polyline: copy_clicked(u)
+                        )
+                        dpg.add_separator()
 
 def draw_all():
     global loaded_routes
@@ -263,12 +272,6 @@ def draw_all():
     period_start_end = get_week_start_end(datetime.today())
     files = get_files_from_period(period_start_end[0], period_start_end[1])
 
-    # with dpg.file_dialog(directory_selector=False, show=False, callback=choose_new_routes, id="file_dialog_id",
-    #         default_path=routes_location, width=700, height=400):
-    #     dpg.add_file_extension(".json", color=(150, 255, 150, 255))
-
-    # loaded_routes = load_routes(latest)
-
     for file in files:
         routes = load_routes(file)
 
@@ -278,13 +281,14 @@ def draw_all():
     normalize_timestamp()
 
     build_graph_ui(period_start_end)
-    # build_collapsing_ui(loaded_routes)
+    build_collapsing_ui()
 
 def main():
     global loaded_routes
+    global window_size
 
     dpg.create_context()
-    dpg.create_viewport(title="Routes Viewer", width=780, height=530)
+    dpg.create_viewport(title="Routes Viewer", width=window_size[0], height=window_size[1])
     dpg.setup_dearpygui()
 
     draw_all()
