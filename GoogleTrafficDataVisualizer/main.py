@@ -83,6 +83,21 @@ def load_routes(filepath: str) -> Routes.Routes:
 
     return routes
 
+def normalize_timestamp():
+    global loaded_routes
+
+    base_date = datetime(2000, 1, 1)
+
+    for routes in loaded_routes:
+        for route in routes.routes:
+            # Parse the original timestamp
+            dt = datetime.fromisoformat(route.timestamp)
+            # Keep the time part but set the date to the fixed base date
+            normalized_dt = base_date.replace(hour=dt.hour, minute=dt.minute, second=dt.second,
+                                              microsecond=dt.microsecond)
+            # Write back as a string (ISO format)
+            route.normalized_timestamp = normalized_dt.isoformat()
+
 def seconds_to_iso_duration(seconds: int) -> str:
     td = timedelta(seconds=seconds)
     hours, remainder = divmod(td.seconds, 3600)
@@ -110,25 +125,18 @@ def refresh_ui(routes: list[Routes.Route]):
     build_graph_ui(routes)
     build_collapsing_ui(routes)
 
-def choose_new_routes(sender, app_data):
+def build_graph_ui(period: list[str]):
     global loaded_routes
-    filepath = app_data["file_path_name"]
-    loaded_routes = load_routes(filepath)
-    refresh_ui(loaded_routes)
 
-def build_graph_ui(): # routes_list is list[Routes]
-    global loaded_routes
-    routes_list = loaded_routes
-    # Flatten all routes from all files but keep per‑file data for plotting
     all_series = []   # will store (x_vals, y_vals, sorted_route_list, label) per file
 
-    for file_index, routes_obj in enumerate(routes_list):
+    for file_index, routes_obj in enumerate(loaded_routes):
         file_routes = routes_obj.routes   # list of Route
         if not file_routes:
             continue
 
         sorted_routes = sorted(file_routes, key=lambda r: r.timestamp)
-        x_vals = [calendar.timegm(datetime.fromisoformat(r.timestamp).timetuple()) for r in sorted_routes]
+        x_vals = [calendar.timegm(datetime.fromisoformat(r.normalized_timestamp).timetuple()) for r in sorted_routes]
         # Convert duration string like "1234s" to integer seconds
         y_vals = [int(r.duration.replace("s", "")) for r in sorted_routes]
 
@@ -147,7 +155,7 @@ def build_graph_ui(): # routes_list is list[Routes]
     y_snap = y_range * 0.02
 
     with dpg.window(label="Routes Graph", width=780, height=520, tag="graph_window"):
-        dpg.add_text("Trip Duration Over Time")
+        dpg.add_text(f"Trip Duration Over Time\nPeriod: {period[0]} - {period[1]}")
         dpg.add_spacer(height=4)
 
         with dpg.plot(label="Duration (s) vs Timestamp", height=420, width=-1, tag="plot"):
@@ -162,8 +170,6 @@ def build_graph_ui(): # routes_list is list[Routes]
 
             dpg.set_axis_limits(y_axis, min(all_y) - 30, max(all_y) + 30)
             dpg.fit_axis_data(x_axis)
-
-        dpg.add_button(label="Load file", callback=lambda: dpg.show_item("file_dialog_id"))
 
     # Tooltip window
     with dpg.window(tag="tooltip", height=10, show=False, no_title_bar=True, no_resize=True,
@@ -220,6 +226,7 @@ def build_graph_ui(): # routes_list is list[Routes]
     dpg.bind_item_handler_registry("plot", "plot_handlers")
 def build_collapsing_ui(routes: list[Routes.Route]):
     global loaded_routes
+    # Refactor: make colapsing headers nested
 
     def copy_clicked(encoded_polyline):
         if encoded_polyline is None:
@@ -268,19 +275,9 @@ def draw_all():
         if routes is not None:
             loaded_routes.append(routes)
 
-    base_date = datetime(2000, 1, 1)
+    normalize_timestamp()
 
-    for routes in loaded_routes:
-        for route in routes.routes:
-            # Parse the original timestamp
-            dt = datetime.fromisoformat(route.timestamp)
-            # Keep the time part but set the date to the fixed base date
-            normalized_dt = base_date.replace(hour=dt.hour, minute=dt.minute, second=dt.second,
-                                              microsecond=dt.microsecond)
-            # Write back as a string (ISO format)
-            route.timestamp = normalized_dt.isoformat()
-
-    build_graph_ui()
+    build_graph_ui(period_start_end)
     # build_collapsing_ui(loaded_routes)
 
 def main():

@@ -16,3 +16,4 @@ class Route:
         self.duration_as_timespan = duration_as_timespan
         self.polyLine = poly_line
         self.timestamp = timestamp
+        self.normalized_timestamp = timestamp
