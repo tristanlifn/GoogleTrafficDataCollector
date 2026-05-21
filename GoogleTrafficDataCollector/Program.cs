@@ -11,7 +11,7 @@ public class RoutesResponse
 
 class Program
 {
-    static void Main(string[] args)
+    private static void Main(string[] args)
     {
         Program _ = new();
     }
@@ -21,7 +21,7 @@ class Program
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    private readonly HttpClient HttpClient = new();
+    private readonly HttpClient _httpClient = new();
     private const string Url = "https://routes.googleapis.com/directions/v2:computeRoutes";
     private static string _routesFolderLocation = "";
     private static string _key = "";
@@ -35,33 +35,61 @@ class Program
             Console.WriteLine("No valid config file found in execution directory.");
             return;
         }
+
+        string fileLocation = "";
+        RoutesResponse result = new();
+        string oldJson = "";
         
         try
         {
-            string fileLocation = CheckFileExists();
-            
-            RoutesResponse result = ComputeRoutesAsync().Result;
-            
-            if (!result.Routes.Any())
-                return;
-            
-            string oldJson = File.ReadAllText(fileLocation);
-
-            List<Route> oldRoutsList = [];
-            if (!string.IsNullOrWhiteSpace(oldJson))
-                oldRoutsList = JsonSerializer.Deserialize<RoutesResponse>(oldJson, JsonOptions)?.Routes ?? [];
-            
-            result.Routes?.AddRange(oldRoutsList);
-            
-            File.WriteAllText(fileLocation, JsonSerializer.Serialize(result, JsonOptions));
+            fileLocation = CheckFileExists();
         }
         catch (HttpRequestException ex)
         {
-            Console.WriteLine($"Error: {ex.StatusCode} - {ex.Message}");
+            Console.WriteLine($"Error Getting file location: {ex.Message}");
         }
-    }
+        
+        if (string.IsNullOrWhiteSpace(fileLocation))
+        {
+            Console.WriteLine("Error: No file to write to");
+            return;
+        }
+        
+        try
+        {
+            result = ComputeRoutesAsync().Result;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
 
-    private bool LoadConfig()
+        if (result.Routes.Count == 0)
+        {
+            Console.WriteLine("Error: no routes loaded");
+            return;
+        }
+        
+        try
+        {
+            oldJson = File.ReadAllText(fileLocation);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Error reading file: {e.Message}");
+            return;
+        }
+        
+        List<Route> oldRoutsList = [];
+        if (!string.IsNullOrWhiteSpace(oldJson))
+            oldRoutsList = JsonSerializer.Deserialize<RoutesResponse>(oldJson, JsonOptions)?.Routes ?? [];
+        
+        result.Routes.AddRange(oldRoutsList);
+        
+        File.WriteAllText(fileLocation, JsonSerializer.Serialize(result, JsonOptions));
+    }
+    
+    private static bool LoadConfig()
     {
         string appDir = AppContext.BaseDirectory;
         string configLocation = Path.Combine(appDir, "config.json");
@@ -71,7 +99,15 @@ class Program
         
         if (string.IsNullOrEmpty(config.GoogleApiKey) || string.IsNullOrEmpty(config.OriginAddress) || string.IsNullOrEmpty(config.DestinationAddress) ||  string.IsNullOrEmpty(config.RoutesFolderLocation))
             return false;
-        
+
+        if (!config.RoutesFolderLocation.EndsWith('/') || !config.RoutesFolderLocation.EndsWith('\\'))
+        {
+            if (config.RoutesFolderLocation.Contains('/'))
+                config.RoutesFolderLocation += '/';
+            else
+                config.RoutesFolderLocation += '\\';
+        }
+            
         _key = config.GoogleApiKey;
         _routesFolderLocation =  config.RoutesFolderLocation;
         _originAddress = config.OriginAddress;
@@ -80,7 +116,7 @@ class Program
         return true;
     }
 
-    private string CheckFileExists()
+    private static string CheckFileExists()
     {
         string fileLocation = $"{_routesFolderLocation}routes_{DateTime.Now:yyyy-MM-dd}.json";
             
@@ -95,7 +131,7 @@ class Program
     
     private async Task<RoutesResponse> ComputeRoutesAsync()
     {
-        string json = "";
+        string json;
         
         string requestBody = $$"""
             {
@@ -128,14 +164,14 @@ class Program
             request.Headers.Add("X-Goog-FieldMask",
                 "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline");
 
-            using HttpResponseMessage response = await HttpClient.SendAsync(request);
+            using HttpResponseMessage response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
 
             json = await response.Content.ReadAsStringAsync();
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            Console.WriteLine($"Error getting route: {e.Message}");
             throw;
         }
         

@@ -1,6 +1,6 @@
 namespace GoogleTrafficDataCollector;
 
-public class Route(int distanceMeters, string duration, PolyLine polyline)
+public abstract class Route(int distanceMeters, string duration, PolyLine polyline)
 {
     public int DistanceMeters { get; set; } = distanceMeters;
     public string Duration { get; set; } = duration;
@@ -11,7 +11,7 @@ public class Route(int distanceMeters, string duration, PolyLine polyline)
         TimeSpan.FromSeconds(double.Parse(Duration.TrimEnd('s')));
 }
 
-public class PolyLine
+public abstract class PolyLine
 {
     public string EncodedPolyline { get; set; }
 }
