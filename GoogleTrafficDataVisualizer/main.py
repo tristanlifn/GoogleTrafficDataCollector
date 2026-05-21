@@ -38,16 +38,15 @@ def get_week_start_end(date_input) -> list[str]:
     start_date = date_input - timedelta(days=days_to_subtract)
     end_date = start_date + timedelta(days=7)
 
-    start_date = start_date.strftime("%Y-%m-%d")
-    end_date = end_date.strftime("%Y-%m-%d")
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
 
-    return [start_date, end_date]
+    return [start_str, end_str]
 
 def get_files_from_period(start_date: str, end_date: str) -> list[str]:
     global routes_location
 
     files_in_period = []
-
     all_files = os.listdir(routes_location)
 
     if all_files is None or all_files == []:
@@ -107,7 +106,7 @@ def seconds_to_iso_duration(seconds: int) -> str:
         parts += f"{secs}S"
     return parts
 
-def refresh_ui():
+def refresh_ui(start_str: str, end_str: str):
     # Delete existing windows if they exist
     if dpg.does_item_exist("graph_window"):
         dpg.delete_item("graph_window")
@@ -118,10 +117,67 @@ def refresh_ui():
     if dpg.does_item_exist("plot_handlers"):
         dpg.delete_item("plot_handlers")
 
-    build_graph_ui()
+    normalize_timestamp()
+    build_graph_ui(start_str, end_str)
     build_collapsing_ui()
 
-def build_graph_ui(period: list[str]):
+def apply_date_range():
+    # Read dates from the pickers
+    start_date_dict = dpg.get_value("start_date_picker")
+    end_date_dict = dpg.get_value("end_date_picker")
+
+    if start_date_dict is None or end_date_dict is None:
+        return   # user didn't select both dates
+
+    # Convert the dicts (e.g. {'year': 2026, 'month': 5, 'day': 20}) to strings
+    start_str = f"{start_date_dict['year'] + 1900:04d}-{start_date_dict['month'] + 1:02d}-{start_date_dict['month_day']:02d}"
+    end_str   = f"{end_date_dict['year'] + 1900:04d}-{end_date_dict['month'] + 1:02d}-{end_date_dict['month_day']:02d}"
+
+    if start_str > end_str:
+        # Optionally swap them or show an error – here we swap silently
+        start_str, end_str = end_str, start_str
+
+    # Load files for the selected period
+    files = get_files_from_period(start_str, end_str)
+    if files is None:
+        files = []
+
+    # Repopulate loaded_routes with the new files
+    global loaded_routes
+    loaded_routes = []
+    for f in files:
+        routes = load_routes(f)
+        if routes is not None:
+            loaded_routes.append(routes)
+
+    # Hide the date picker window
+    dpg.hide_item("date_range_window")
+
+    # Refresh the graph and collapse UI
+    refresh_ui(start_str, end_str)
+
+def open_date_range_picker():
+    # If the window already exists, just show it
+    if dpg.does_item_exist("date_range_window"):
+        dpg.show_item("date_range_window")
+        return
+
+    # Create a small window with two date pickers and an Apply button
+    with dpg.window(label="Select Date Range", width=300, height=200,
+                    tag="date_range_window", show=True,
+                    no_collapse=True, no_close=True, no_resize=True,
+                    modal=True):
+        today = datetime.today()
+        picker_default_val = {"year": today.year - 1900, "month": today.month - 1, "month_day": today.day}
+
+        dpg.add_text("Choose start and end dates:")
+        dpg.add_date_picker(label="Start Date", tag="start_date_picker", default_value=picker_default_val)
+        dpg.add_date_picker(label="End Date", tag="end_date_picker", default_value=picker_default_val)
+        dpg.add_spacer(height=8)
+        dpg.add_button(label="Apply", callback=apply_date_range)
+        dpg.add_button(label="Cancel", callback=lambda: dpg.hide_item("date_range_window"))
+
+def build_graph_ui(start_str: str, end_str: str):
     global loaded_routes
     global window_size
 
@@ -136,7 +192,7 @@ def build_graph_ui(period: list[str]):
         x_vals = [calendar.timegm(datetime.fromisoformat(r.normalized_timestamp).timetuple()) for r in sorted_routes]
         y_vals = [int(r.duration.replace("s", "")) for r in sorted_routes]
 
-        label = f"File {file_index + 1}"
+        label = f"{routes_obj.routes[0].timestamp.split('T')[0]}"
         all_series.append((x_vals, y_vals, sorted_routes, label))
 
     if not all_series:
@@ -152,7 +208,7 @@ def build_graph_ui(period: list[str]):
 
     with dpg.window(label="Routes Graph", width=window_size[0], height=window_size[1],
                     tag="graph_window", no_close=True, no_move=True, no_resize=True):
-        dpg.add_text(f"Trip Duration Over Time\nPeriod: {period[0]} - {period[1]}")
+        dpg.add_text(f"Trip Duration Over Time\nPeriod: {start_str} - {end_str}")
         dpg.add_spacer(height=4)
 
         with dpg.plot(label="Duration (s) vs Timestamp", height=420, width=-1, tag="plot"):
@@ -167,6 +223,8 @@ def build_graph_ui(period: list[str]):
 
             dpg.set_axis_limits(y_axis, min(all_y) - 30, max(all_y) + 30)
             dpg.fit_axis_data(x_axis)
+
+        dpg.add_button(label="Select Date Range", callback=open_date_range_picker)
 
     # Tooltip window
     with dpg.window(tag="tooltip", height=10, show=False, no_title_bar=True, no_resize=True,
@@ -269,8 +327,8 @@ def draw_all():
     if routes_location[-1] != '/':
         routes_location += '/'
 
-    period_start_end = get_week_start_end(datetime.today())
-    files = get_files_from_period(period_start_end[0], period_start_end[1])
+    start_str, end_str = get_week_start_end(datetime.today())
+    files = get_files_from_period(start_str, end_str)
 
     for file in files:
         routes = load_routes(file)
@@ -280,7 +338,7 @@ def draw_all():
 
     normalize_timestamp()
 
-    build_graph_ui(period_start_end)
+    build_graph_ui(start_str, end_str)
     build_collapsing_ui()
 
 def main():
