@@ -10,7 +10,9 @@ import os.path
 
 routes_location = ""
 loaded_routes = []
-window_size = window_size_x, window_size_y = 1000, 600
+window_x = 1000
+window_y = 550
+window_size = window_x, window_y
 
 def error_opening(message: str):
     with dpg.window(label="Error", width=400, height=200):
@@ -18,6 +20,9 @@ def error_opening(message: str):
 
 def get_config():
     global routes_location
+    global window_x
+    global window_y
+
     if not os.path.exists("config.json"):
         error_opening("No config found in executing directory")
         return
@@ -26,6 +31,8 @@ def get_config():
         data = json.load(f)
 
     routes_location = data["routesFolderLocation"]
+    window_x = data["window_x"]
+    window_y = data["window_y"]
 
 def get_week_start_end(date_input) -> list[str]:
     if isinstance(date_input, str):
@@ -260,7 +267,7 @@ def build_graph_ui(start_str: str, end_str: str):
             arrival = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')
             arrival = arrival + timedelta(seconds=seconds)
             dpg.set_value("tooltip_text",
-                          f"Duration:  {iso_duration}\nLeaving: {timestamp.replace('T', ' ')}\nArriving: {arrival}")
+                          f"Duration: {iso_duration}\nLeaving: {timestamp.replace('T', ' ')}\nArriving: {arrival}")
             px, py = dpg.get_mouse_pos(local=False)
             dpg.configure_item("tooltip", show=True, pos=(int(px) + 12, int(py) + 12))
         else:
