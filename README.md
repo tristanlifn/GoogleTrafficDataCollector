@@ -25,7 +25,9 @@ It looks for the `config.json` file in the executing directory.
 The file should have this structure:
 ```
 {
-  "routesFolderLocation": "/Absolute/path/to/folder/"
+  "routesFolderLocation": "/home/tristan/routes/",
+  "window_x": 1000,
+  "window_y": 600
 }
 ```
 
