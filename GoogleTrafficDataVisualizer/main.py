@@ -257,8 +257,10 @@ def build_graph_ui(start_str: str, end_str: str):
             seconds = all_series[s_idx][1][p_idx]
             iso_duration = seconds_to_iso_duration(seconds)
             timestamp = all_series[s_idx][2][p_idx].timestamp.split('.')[0]
+            arrival = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')
+            arrival = arrival + timedelta(seconds=seconds)
             dpg.set_value("tooltip_text",
-                          f"Duration:  {iso_duration}\nTimestamp: {timestamp.replace('T', ' ')}")
+                          f"Duration:  {iso_duration}\nLeaving: {timestamp.replace('T', ' ')}\nArriving: {arrival}")
             px, py = dpg.get_mouse_pos(local=False)
             dpg.configure_item("tooltip", show=True, pos=(int(px) + 12, int(py) + 12))
         else:
