@@ -16,7 +16,7 @@ The file should have this structure:
 }
 ```
 
-I recommend seting up a CRON job to run the tool every 5 minuts on a server, it does not need to be a powerfull or dedicated server. 
+I recommend setting up a CRON job to run the tool every 5 minutes. 
 
 ## visualization tool
 The visualization tool is made with Python using DearPyGui.
@@ -31,4 +31,9 @@ The file should have this structure:
 }
 ```
 
-It automatically openes the newest created file int the configured path. You can manually open other files.
+It automatically opens the files in current week. you can then select a custom period by selecting it using the `Select Date Range` button.
+It will create an average og the selected period, appropriately named `average` in the graph legend.
+
+### Known bugs:
+If there are no routes in the selected period, the `Select Date Range` button will not show, and it is impossible to select a new period
+If you hide a day it will still show up when hovering where it would be if not hidden. 

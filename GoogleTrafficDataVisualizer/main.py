@@ -1,4 +1,5 @@
 import json
+import time
 import Routes
 import dearpygui.dearpygui as dpg
 from datetime import datetime, timedelta
@@ -10,6 +11,7 @@ import os.path
 
 routes_location = ""
 loaded_routes = []
+avg_routes = []
 window_x = 1000
 window_y = 550
 window_size = window_x, window_y
@@ -89,6 +91,34 @@ def load_routes(filepath: str) -> Routes.Routes:
 
     return routes
 
+def average_period():
+    global loaded_routes
+    global avg_routes
+
+    avg_routes = []
+    timestamp_index = 0
+
+    while timestamp_index < 36:
+        routes_at_timestamp = []
+
+        for day in loaded_routes:
+            routes_at_timestamp.append(day.routes[timestamp_index])
+
+        avg_dist = sum([i.distance_meters for i in routes_at_timestamp]) / len(routes_at_timestamp)
+        avg_duration = sum([int(i.duration.replace('s', '')) for i in routes_at_timestamp]) / len(routes_at_timestamp)
+        avg_duration = int(avg_duration)
+        avg_timespan = time.strftime('%H:%M:%S', time.gmtime(avg_duration))
+
+        date = datetime(2000, 1, 1)
+        timestamp = routes_at_timestamp[0].timestamp
+        dt = datetime.fromisoformat(timestamp)
+        date = date.replace(hour=dt.hour, minute=dt.minute, second=dt.second, microsecond=dt.microsecond).isoformat()
+
+        new_route = Routes.Route(int(avg_dist), str(avg_duration) + 's', avg_timespan, None, date)
+        avg_routes.append(new_route)
+
+        timestamp_index += 1
+
 def normalize_timestamp():
     global loaded_routes
 
@@ -124,6 +154,7 @@ def refresh_ui(start_str: str, end_str: str):
     if dpg.does_item_exist("plot_handlers"):
         dpg.delete_item("plot_handlers")
 
+    average_period()
     normalize_timestamp()
     build_graph_ui(start_str, end_str)
     build_collapsing_ui()
@@ -202,6 +233,13 @@ def build_graph_ui(start_str: str, end_str: str):
         label = f"{routes_obj.routes[0].timestamp.split('T')[0]}"
         all_series.append((x_vals, y_vals, sorted_routes, label))
 
+    if avg_routes:
+        sorted_routes = sorted(avg_routes, key=lambda r: r.timestamp)
+        x_vals = [calendar.timegm(datetime.fromisoformat(r.normalized_timestamp).timetuple()) for r in sorted_routes]
+        y_vals = [int(r.duration.replace("s", "")) for r in sorted_routes]
+
+        all_series.append((x_vals, y_vals, sorted_routes, "average"))
+
     if not all_series:
         return
 
@@ -260,14 +298,17 @@ def build_graph_ui(start_str: str, end_str: str):
     def on_plot_hover():
         nearest = get_nearest_node()
         if nearest is not None:
+            day_list = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
             s_idx, p_idx = nearest
             seconds = all_series[s_idx][1][p_idx]
             iso_duration = seconds_to_iso_duration(seconds)
             timestamp = all_series[s_idx][2][p_idx].timestamp.split('.')[0]
             arrival = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')
             arrival = arrival + timedelta(seconds=seconds)
+            DOW = day_list[arrival.weekday()]
             dpg.set_value("tooltip_text",
-                          f"Duration: {iso_duration}\nLeaving: {timestamp.replace('T', ' ')}\nArriving: {arrival}")
+                          f"Duration: {iso_duration}\nLeaving: {timestamp.replace('T', ' ')}\nArriving: {arrival}\nDay of week: {DOW}")
             px, py = dpg.get_mouse_pos(local=False)
             dpg.configure_item("tooltip", show=True, pos=(int(px) + 12, int(py) + 12))
         else:
@@ -288,6 +329,7 @@ def build_graph_ui(start_str: str, end_str: str):
         dpg.add_item_clicked_handler(callback=on_plot_click)
 
     dpg.bind_item_handler_registry("plot", "plot_handlers")
+
 def build_collapsing_ui():
     global loaded_routes
     global window_size
@@ -345,6 +387,7 @@ def draw_all():
         if routes is not None:
             loaded_routes.append(routes)
 
+    average_period()
     normalize_timestamp()
 
     build_graph_ui(start_str, end_str)
